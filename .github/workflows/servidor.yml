@@ -1,0 +1,40 @@
+# Publica el servidor en Cloudflare (videos en R2 y páginas de descarga).
+# Necesita los secretos CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID y MARLES_CLAVE.
+name: Servidor Cloudflare
+
+on:
+  push:
+    branches: [main]
+    paths: ['servidor/**', '.github/workflows/servidor.yml']
+  workflow_dispatch:
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: servidor
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Revisar secretos
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ] || [ -z "${{ secrets.MARLES_CLAVE }}" ]; then
+            echo "::error::Faltan secretos. Sigue la guía GUIA-CLOUDFLARE.md"
+            exit 1
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - run: npm test
+      - name: Crear almacenamiento de videos (solo la primera vez)
+        run: npx wrangler r2 bucket create marles360-videos || echo "Ya existe"
+      - name: Borrar videos a los 30 días
+        run: npx wrangler r2 bucket lifecycle add marles360-videos borrar-30-dias --expire-days 30 --abort-multipart-days 1 --force || echo "La regla ya existe"
+      - name: Publicar
+        run: npx wrangler deploy
+      - name: Guardar clave de subida
+        run: echo "${{ secrets.MARLES_CLAVE }}" | npx wrangler secret put CLAVE

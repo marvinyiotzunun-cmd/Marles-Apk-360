@@ -1,0 +1,10 @@
+# Servidor de Marles 360 en Cloudflare Workers (plan gratuito).
+name = "marles360"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[[r2_buckets]]
+binding = "VIDEOS"
+bucket_name = "marles360-videos"
+
+# La clave de subida se guarda como secreto: wrangler secret put CLAVE

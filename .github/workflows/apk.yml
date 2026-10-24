@@ -1,0 +1,47 @@
+# Compila el APK de Android y lo publica en la página de Releases del repositorio.
+name: APK Android
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['servidor/**', '**.md']
+  pull_request:
+    paths-ignore: ['servidor/**', '**.md']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.8'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      - name: Compilar APK
+        run: flutter build apk --release --target-platform android-arm64 --build-number=${{ github.run_number }}
+      - name: Renombrar
+        run: cp build/app/outputs/flutter-apk/app-release.apk marles360-v${{ github.run_number }}.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: marles360-apk
+          path: marles360-v${{ github.run_number }}.apk
+      - name: Publicar en Releases
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: Marles 360 versión ${{ github.run_number }}
+          body: Abre este enlace desde el Xiaomi y toca el archivo .apk para instalarlo.
+          files: marles360-v${{ github.run_number }}.apk
