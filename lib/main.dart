@@ -17,9 +17,7 @@ Future<void> main() async {
 
   // Cuando vuelve la señal, se suben solos los videos pendientes.
   Connectivity().onConnectivityChanged.listen((estado) {
-    if (!estado.contains(ConnectivityResult.none)) {
-      Nube.instancia.subirPendientes();
-    }
+    if (!estado.contains(ConnectivityResult.none)) unawaited(Nube.instancia.subirPendientes());
   });
   unawaited(Nube.instancia.subirPendientes());
 }

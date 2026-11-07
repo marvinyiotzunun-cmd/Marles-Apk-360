@@ -23,7 +23,7 @@ En el repositorio `marles-apk-360`: **Settings** → **Secrets and variables** �
 | --- | --- |
 | `CLOUDFLARE_API_TOKEN` | El token del paso 2 |
 | `CLOUDFLARE_ACCOUNT_ID` | El Account ID del paso 1 |
-| `MARLES_CLAVE` | Una clave que tú inventes, larga, sin espacios. Es la que pondrás en la app |
+| `MARLES_CLAVE` | Una clave que tú inventes: al menos 16 letras y números, sin espacios. Es la que pondrás en la app |
 
 ## 4. Publicar el servidor
 

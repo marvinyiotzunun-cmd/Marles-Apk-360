@@ -6,6 +6,9 @@ on:
   push:
     branches: [main]
     paths: ['servidor/**', '.github/workflows/servidor.yml']
+  # En cada cambio propuesto solo se corren las pruebas (no se publica nada).
+  pull_request:
+    paths: ['servidor/**', '.github/workflows/servidor.yml']
   workflow_dispatch:
 
 jobs:
@@ -20,9 +23,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Revisar secretos
+        if: github.event_name != 'pull_request'
+        env:
+          MARLES_CLAVE: ${{ secrets.MARLES_CLAVE }}
         run: |
-          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ] || [ -z "${{ secrets.MARLES_CLAVE }}" ]; then
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ] || [ -z "$MARLES_CLAVE" ]; then
             echo "::error::Faltan secretos. Sigue la guía GUIA-CLOUDFLARE.md"
+            exit 1
+          fi
+          # Una clave corta se puede adivinar probando; con 16 o más letras y números no.
+          if [ "${#MARLES_CLAVE}" -lt 16 ]; then
+            echo "::error::MARLES_CLAVE es muy corta (${#MARLES_CLAVE} caracteres). Usa al menos 16 letras y números."
             exit 1
           fi
       - uses: actions/setup-node@v4
@@ -31,12 +42,16 @@ jobs:
       - run: npm ci
       - run: npm test
       - name: Crear almacenamiento de videos (solo la primera vez)
+        if: github.event_name != 'pull_request'
         run: npx wrangler r2 bucket create marles360-videos || echo "Ya existe"
       - name: Borrar videos a los 30 días
+        if: github.event_name != 'pull_request'
         run: npx wrangler r2 bucket lifecycle add marles360-videos borrar-30-dias --expire-days 30 --abort-multipart-days 1 --force || echo "La regla ya existe"
       - name: Publicar
+        if: github.event_name != 'pull_request'
         run: npx wrangler deploy
       - name: Guardar clave de subida
+        if: github.event_name != 'pull_request'
         # printf (no echo) para que la clave no lleve un salto de línea al final:
         # con él, la clave del servidor nunca coincidiría con la de la app.
         env:

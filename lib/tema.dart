@@ -21,6 +21,9 @@ ThemeData temaMarles() {
     secondary: Marles.turquesaProfundo,
     surface: Marles.crema,
   );
+  // La letra de los botones se toma de la tipografía del tema; un TextStyle
+  // suelto reemplaza la de Material y en el Xiaomi salía con otra fuente.
+  final letras = ThemeData(colorScheme: esquema).textTheme;
   return ThemeData(
     colorScheme: esquema,
     scaffoldBackgroundColor: Marles.crema,
@@ -35,7 +38,7 @@ ThemeData temaMarles() {
         backgroundColor: Marles.rojo,
         foregroundColor: Colors.white,
         minimumSize: const Size(64, 52),
-        textStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+        textStyle: letras.labelLarge?.copyWith(fontSize: 17, fontWeight: FontWeight.w600),
       ),
     ),
     cardTheme: const CardThemeData(color: Colors.white, elevation: 0),

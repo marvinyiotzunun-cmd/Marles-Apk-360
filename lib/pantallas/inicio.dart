@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../almacen.dart';
 import '../modelos.dart';
 import '../servicios/nube.dart';
 import '../tema.dart';
+import '../utiles/formato.dart';
+import '../utiles/medidas.dart';
 import 'ajustes.dart';
 import 'bibliotecas.dart';
 import 'evento.dart';
@@ -18,7 +22,12 @@ class PantallaInicio extends StatelessWidget {
     return ListenableBuilder(
       listenable: a,
       builder: (context, _) {
-        final eventos = [...a.eventos]..sort((x, y) => y.fecha.compareTo(x.fecha));
+        // Primero los más recientes; con la misma fecha, por nombre (orden fijo).
+        final eventos = [...a.eventos]
+          ..sort((x, y) {
+            final porFecha = y.fecha.compareTo(x.fecha);
+            return porFecha != 0 ? porFecha : x.nombre.compareTo(y.nombre);
+          });
         final pendientes = a.pendientes.length;
         return Scaffold(
           appBar: AppBar(
@@ -42,14 +51,14 @@ class PantallaInicio extends StatelessWidget {
             icon: const Icon(Icons.add),
             label: const Text('Nuevo evento'),
             onPressed: () async {
-              final e = await Navigator.of(context).push<Evento>(
-                MaterialPageRoute(builder: (_) => const PantallaEventoForm()),
-              );
+              final e = await Navigator.of(context)
+                  .push<Evento>(MaterialPageRoute(builder: (_) => const PantallaEventoForm()));
               if (e != null && context.mounted) _ir(context, PantallaEvento(evento: e));
             },
           ),
           body: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+            // Abajo queda espacio para que el botón "Nuevo evento" no tape el último evento.
+            padding: margenes(context, arriba: 8, abajo: 88 + 28 * escalaLetra(context)),
             children: [
               if (!a.nubeLista)
                 _Aviso(
@@ -61,30 +70,11 @@ class PantallaInicio extends StatelessWidget {
               if (a.nubeLista && pendientes > 0)
                 _Aviso(
                   color: Marles.turquesaPalido,
-                  texto: '$pendientes video(s) esperando señal para subir.',
+                  texto: '${cantidad(pendientes, 'video')} esperando señal para subir.',
                   boton: 'Subir ahora',
-                  alTocar: () async {
-                    final n = await Nube.instancia.subirPendientes();
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(n > 0 ? 'Se subieron $n video(s)' : 'Aún sin señal')),
-                      );
-                    }
-                  },
+                  alTocar: () => unawaited(_subirAhora(context)),
                 ),
-              if (eventos.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.only(top: 120),
-                  child: Column(
-                    children: [
-                      Icon(Icons.threesixty, size: 72, color: Marles.turquesa),
-                      SizedBox(height: 12),
-                      Text('Crea tu primer evento', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
-                      SizedBox(height: 4),
-                      Text(Marles.lema, style: TextStyle(color: Marles.tintaSuave)),
-                    ],
-                  ),
-                ),
+              if (eventos.isEmpty) const _SinEventos(),
               for (final e in eventos)
                 Card(
                   margin: const EdgeInsets.only(bottom: 10),
@@ -96,7 +86,7 @@ class PantallaInicio extends StatelessWidget {
                       child: Icon(Icons.celebration_outlined),
                     ),
                     title: Text(e.nombre, style: const TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: Text('${fechaCorta(e.fecha)} · ${a.videosDe(e.id).length} videos'),
+                    subtitle: Text('${fechaCorta(e.fecha)} · ${cantidad(a.videosDe(e.id).length, 'video')}'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => _ir(context, PantallaEvento(evento: e)),
                   ),
@@ -108,8 +98,59 @@ class PantallaInicio extends StatelessWidget {
     );
   }
 
+  Future<void> _subirAhora(BuildContext context) async {
+    // clearSnackBars: si quedaba un aviso anterior, este no espera a que se quite solo.
+    final mensajero = ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(const SnackBar(content: Text('Subiendo videos pendientes…')));
+    final n = await Nube.instancia.subirPendientes();
+    // Si no subió ninguno, se dice por qué (sin señal, la clave, el servidor...).
+    final problema = n > 0
+        ? null
+        : await Nube.instancia.probar() ?? 'No se pudo subir. Intenta de nuevo en un momento.';
+    mensajero
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(content: Text(problema ?? 'Se ${n == 1 ? 'subió' : 'subieron'} ${cantidad(n, 'video')}.')),
+      );
+  }
+
   void _ir(BuildContext context, Widget p) =>
-      Navigator.of(context).push(MaterialPageRoute(builder: (_) => p));
+      unawaited(Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => p)));
+}
+
+class _SinEventos extends StatelessWidget {
+  const _SinEventos();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(top: MediaQuery.sizeOf(context).height * 0.08),
+      child: const Column(
+        children: [
+          Icon(Icons.threesixty, size: 72, color: Marles.turquesaProfundo),
+          SizedBox(height: 12),
+          Text(
+            'Crea tu primer evento',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+          ),
+          SizedBox(height: 4),
+          Text(
+            Marles.lema,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Marles.tintaSuave),
+          ),
+          SizedBox(height: 4),
+          Text(
+            'Toca "Nuevo evento" para elegir marco, canción y duración.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Marles.tintaSuave),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _Aviso extends StatelessWidget {
@@ -121,21 +162,37 @@ class _Aviso extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final escala = escalaLetra(context);
+    final accion = TextButton(onPressed: alTocar, child: Text(boton));
     return Card(
       color: color,
       margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-        child: Row(
-          children: [
-            Expanded(child: Text(texto)),
-            TextButton(onPressed: alTocar, child: Text(boton)),
-          ],
+        child: LayoutBuilder(
+          builder: (context, caja) {
+            // Si al lado del botón el texto quedaría en una columna delgada (con
+            // letra grande partía "esperando" en "espera-ndo"), el botón va abajo.
+            final anchoBoton = 24 + boton.length * 8.0 * escala;
+            if (caja.maxWidth - anchoBoton >= 140 * escala) {
+              return Row(
+                children: [
+                  Expanded(child: Text(texto)),
+                  const SizedBox(width: 8),
+                  accion,
+                ],
+              );
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(padding: const EdgeInsets.only(top: 4, right: 8), child: Text(texto)),
+                Align(alignment: Alignment.centerRight, child: accion),
+              ],
+            );
+          },
         ),
       ),
     );
   }
 }
-
-const _meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-String fechaCorta(DateTime f) => '${f.day} ${_meses[f.month - 1]} ${f.year}';
