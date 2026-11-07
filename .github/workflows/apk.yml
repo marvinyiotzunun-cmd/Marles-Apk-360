@@ -26,10 +26,23 @@ jobs:
           flutter-version: '3.47.8'
           channel: stable
           cache: true
+      - name: Revisar la firma
+        # Las versiones que se publican deben llevar la firma oficial; sin ella no
+        # se instalarían encima de la app que ya está en el Xiaomi.
+        if: github.event_name != 'pull_request'
+        env:
+          MARLES_FIRMA: ${{ secrets.MARLES_FIRMA }}
+        run: |
+          if [ -z "$MARLES_FIRMA" ]; then
+            echo "::error::Falta el secreto MARLES_FIRMA. Sigue el paso 'Firma del APK' del README."
+            exit 1
+          fi
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
       - name: Compilar APK
+        env:
+          MARLES_FIRMA: ${{ secrets.MARLES_FIRMA }}
         run: flutter build apk --release --target-platform android-arm64 --build-number=${{ github.run_number }}
       - name: Renombrar
         run: cp build/app/outputs/flutter-apk/app-release.apk marles360-v${{ github.run_number }}.apk

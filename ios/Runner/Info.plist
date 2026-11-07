@@ -2,6 +2,13 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Textos que iOS muestra al pedir permisos (sin ellos la app se cierra al abrir la cámara). -->
+	<key>NSCameraUsageDescription</key>
+	<string>Marles 360 usa la cámara para grabar los videos del photo booth.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Marles 360 graba el sonido del momento junto con el video.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Marles 360 abre tus fotos para importar marcos.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>

@@ -22,7 +22,7 @@ test('rutas con caracteres raros no llegan al almacenamiento', async () => {
 });
 
 test('el nombre del evento se escapa en la página', () => {
-  const html = paginaVideo({ evento: 'abc123', id: 'v1v1v1v1', nombre: '<script>alert(1)</script>' });
+  const { cuerpo: html } = paginaVideo({ evento: 'abc123', id: 'v1v1v1v1', nombre: '<script>alert(1)</script>' });
   assert.ok(!html.includes('<script>alert(1)'));
   assert.ok(html.includes('&lt;script&gt;'));
 });
@@ -44,4 +44,27 @@ test('una galería vacía no dice que el video expiró', async () => {
   const r = await servidor.fetch(new Request('https://x.dev/e/abc123'), envG);
   assert.equal(r.status, 404);
   assert.match(await r.text(), /aún no tiene videos/);
+});
+
+// Una petición hecha a mano, para probar cabeceras que fetch no deja poner.
+const peticion = (ruta, { method = 'PUT', headers = {}, body = 'x' } = {}) => ({
+  url: `https://x.dev${ruta}`,
+  method,
+  body,
+  headers: new Headers({ Authorization: 'Bearer secreta', ...headers }),
+});
+
+test('una subida sin tamaño se rechaza (R2 lo necesita)', async () => {
+  const r = await servidor.fetch(peticion('/api/subir/abc123/v1v1v1v1', { headers: {} }), env);
+  assert.equal(r.status, 411);
+});
+
+test('una subida de más de 100 MB se rechaza', async () => {
+  const r = await servidor.fetch(peticion('/api/subir/abc123/v1v1v1v1', { headers: { 'content-length': String(200 * 1024 * 1024) } }), env);
+  assert.equal(r.status, 413);
+});
+
+test('sin clave configurada en el servidor, nadie puede subir', async () => {
+  const r = await servidor.fetch(peticion('/api/ping', { method: 'GET' }), { VIDEOS: {} });
+  assert.equal(r.status, 401);
 });

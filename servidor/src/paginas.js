@@ -6,12 +6,17 @@ const LIMITE_COMPARTIR = 60 * 1024 * 1024; // más grande que esto, se comparte 
 const escapar = (t) =>
   String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
+// Cada página lleva un número de un solo uso (nonce): el navegador solo ejecuta
+// el script que lo tiene, aunque alguien lograra meter otro en la página.
 function base(titulo, cuerpo, script = '') {
-  return `<!doctype html>
+  const nonce = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))));
+  const html = `<!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#d03a3b">
 <title>${escapar(titulo)}</title>
 <meta property="og:title" content="${escapar(titulo)}">
 <meta property="og:description" content="${LEMA}">
@@ -46,9 +51,10 @@ h2{font-size:17px;margin:20px 0 8px}
 ${cuerpo}
 <footer>${LEMA}</footer>
 <div class="franja"></div>
-${script}
+${script.replace(/<script>/g, `<script nonce="${nonce}">`)}
 </body>
 </html>`;
+  return { cuerpo: html, nonce };
 }
 
 const cabecera = (nombre) =>
@@ -102,11 +108,11 @@ export function paginaEvento({ evento, nombre, videos }) {
   const cuerpo = `${cabecera(nombre)}
 <main>
   <div class="carrusel">
-    ${destacados.map((v) => `<a href="/v/${evento}/${v.id}"><video src="${fuente(v)}#t=0.1" muted loop playsinline preload="metadata"></video></a>`).join('')}
+    ${destacados.map((v) => `<a href="/v/${evento}/${v.id}" aria-label="Ver video"><video src="${fuente(v)}#t=0.1" muted loop playsinline preload="metadata"></video></a>`).join('')}
   </div>
   <h2>${videos.length === 1 ? '1 video' : `${videos.length} videos`}</h2>
   <div class="rejilla">
-    ${videos.map((v) => `<a href="/v/${evento}/${v.id}"><video src="${fuente(v)}#t=0.1" muted playsinline preload="metadata"></video></a>`).join('')}
+    ${videos.map((v) => `<a href="/v/${evento}/${v.id}" aria-label="Ver video"><video data-src="${fuente(v)}#t=0.1" muted playsinline preload="none"></video></a>`).join('')}
   </div>
 </main>`;
   const script = `<script>
@@ -114,6 +120,15 @@ export function paginaEvento({ evento, nombre, videos }) {
   // Reproduce solo el video del carrusel que está a la vista.
   const obs = new IntersectionObserver(es => es.forEach(e => e.isIntersecting ? e.target.play().catch(() => {}) : e.target.pause()), { threshold: 0.6 });
   document.querySelectorAll('.carrusel video').forEach(v => obs.observe(v));
+  // La cuadrícula carga cada video solo cuando se acerca a la pantalla, para no
+  // gastar los datos del invitado en una galería de cientos de videos.
+  const perezoso = new IntersectionObserver(es => es.forEach(e => {
+    if (!e.isIntersecting) return;
+    e.target.preload = 'metadata';
+    e.target.src = e.target.dataset.src;
+    perezoso.unobserve(e.target);
+  }), { rootMargin: '300px' });
+  document.querySelectorAll('.rejilla video').forEach(v => perezoso.observe(v));
 })();
 </script>`;
   return base(nombre ? `${nombre} · MarLes 360` : 'Galería · MarLes 360', cuerpo, script);

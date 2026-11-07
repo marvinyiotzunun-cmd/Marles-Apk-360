@@ -29,18 +29,26 @@ android {
     }
 
     // Firma fija para que cada APK nuevo se instale encima del anterior.
+    // La llave (marles360-firma.p12) está en el repositorio pero cifrada: sin
+    // su contraseña no sirve. La contraseña vive solo en el secreto MARLES_FIRMA
+    // de GitHub. Sin ella (por ejemplo al compilar en otra computadora) el APK
+    // sale con la firma de pruebas de Flutter, que no se instala encima del oficial.
+    val claveFirma = System.getenv("MARLES_FIRMA").orEmpty()
     signingConfigs {
-        create("marles") {
-            storeFile = file("marles360.jks")
-            storePassword = "marles360"
-            keyAlias = "marles360"
-            keyPassword = "marles360"
+        if (claveFirma.isNotEmpty()) {
+            create("marles") {
+                storeFile = file("marles360-firma.p12")
+                storeType = "PKCS12"
+                storePassword = claveFirma
+                keyAlias = "marles360"
+                keyPassword = claveFirma
+            }
         }
     }
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("marles")
+            signingConfig = signingConfigs.getByName(if (claveFirma.isNotEmpty()) "marles" else "debug")
         }
     }
 }
