@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
@@ -45,10 +47,14 @@ class _PantallaEntregaState extends State<PantallaEntrega> {
         if (mounted) setState(() => _avance = x);
       });
       if (mounted) setState(() {});
-    } catch (_) {
-      if (mounted) {
-        setState(() => _error = 'Sin señal. El video quedó guardado y se subirá solo cuando vuelva el internet.');
-      }
+    } catch (err) {
+      if (!mounted) return;
+      final texto = '$err';
+      setState(() => _error = texto.contains('respondió 401')
+          ? 'La clave de la nube no coincide con la del servidor. Revísala en Ajustes. El video quedó guardado.'
+          : err is StateError
+              ? '${err.message}.'
+              : 'Sin señal. El video quedó guardado y se subirá solo cuando vuelva el internet.');
     }
   }
 
@@ -69,7 +75,9 @@ class _PantallaEntregaState extends State<PantallaEntrega> {
                   style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
                   icon: const Icon(Icons.bluetooth),
                   label: const Text('Compartir por Bluetooth o Quick Share'),
-                  onPressed: () => SharePlus.instance.share(ShareParams(files: [XFile(v.archivo)])),
+                  onPressed: File(v.archivo).existsSync()
+                      ? () => SharePlus.instance.share(ShareParams(files: [XFile(v.archivo, mimeType: 'video/mp4')]))
+                      : null,
                 ),
                 const SizedBox(height: 8),
                 OutlinedButton.icon(

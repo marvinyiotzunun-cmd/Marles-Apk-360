@@ -50,21 +50,31 @@ class _PantallaCamaraState extends State<PantallaCamara> with WidgetsBindingObse
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState estado) {
-    final cam = _cam;
-    if (cam == null || !cam.value.isInitialized) return;
-    if (estado == AppLifecycleState.inactive) {
+    // Solo se suelta la cámara cuando la app pasa a segundo plano. Bajar la
+    // barra de notificaciones o un aviso del control Bluetooth ("inactive")
+    // no debe cortar la grabación.
+    if (estado == AppLifecycleState.paused || estado == AppLifecycleState.hidden) {
+      final cam = _cam;
+      if (cam == null) return;
       _reloj?.cancel();
       _cam = null;
       cam.dispose();
-      setState(() => _fase = _Fase.preparando);
-    } else if (estado == AppLifecycleState.resumed) {
+      if (mounted) setState(() => _fase = _Fase.preparando);
+    } else if (estado == AppLifecycleState.resumed && _cam == null && !_abriendo) {
       _iniciarCamara();
     }
   }
 
+  bool _abriendo = false;
+
+  /// true mientras se ve la vista previa o el QR: la cámara no debe arrancar sola.
+  bool _fuera = false;
+
   Future<void> _iniciarCamara() async {
+    _abriendo = true;
     try {
       final camaras = await availableCameras();
+      if (camaras.isEmpty) throw StateError('no hay cámaras');
       final lado = e.camaraFrontal ? CameraLensDirection.front : CameraLensDirection.back;
       final desc = camaras.firstWhere((c) => c.lensDirection == lado, orElse: () => camaras.first);
       final cam = CameraController(desc, ResolutionPreset.veryHigh, enableAudio: true, fps: 30);
@@ -76,11 +86,21 @@ class _PantallaCamaraState extends State<PantallaCamara> with WidgetsBindingObse
       }
       setState(() {
         _cam = cam;
+        _error = null;
         _fase = _Fase.listo;
       });
-      if (e.modo == ModoInicio.temporizador) _esperar();
+      if (e.modo == ModoInicio.temporizador && !_fuera) _esperar();
+    } on CameraException catch (err) {
+      if (!mounted) return;
+      final permiso = err.code.contains('AccessDenied') || err.code.contains('Permission');
+      setState(() => _error = permiso
+          ? 'La app no tiene permiso para usar la cámara o el micrófono. '
+              'Actívalo en Ajustes del teléfono > Apps > Marles 360 > Permisos.'
+          : 'No se pudo abrir la cámara (${err.description ?? err.code}).');
     } catch (err) {
-      setState(() => _error = 'No se pudo abrir la cámara: $err');
+      if (mounted) setState(() => _error = 'No se pudo abrir la cámara: $err');
+    } finally {
+      _abriendo = false;
     }
   }
 
@@ -103,7 +123,9 @@ class _PantallaCamaraState extends State<PantallaCamara> with WidgetsBindingObse
       _segundos = desde;
     });
     _reloj = Timer.periodic(const Duration(seconds: 1), (t) {
-      if (_segundos <= 1) {
+      if (!mounted) {
+        t.cancel();
+      } else if (_segundos <= 1) {
         t.cancel();
         alTerminar();
       } else {
@@ -114,8 +136,19 @@ class _PantallaCamaraState extends State<PantallaCamara> with WidgetsBindingObse
 
   Future<void> _grabar() async {
     final cam = _cam;
-    if (cam == null) return;
-    await cam.startVideoRecording();
+    if (cam == null || !mounted) return;
+    // Mientras arranca la grabación se ignoran más toques.
+    setState(() => _fase = _Fase.guardando);
+    try {
+      await cam.startVideoRecording();
+    } catch (_) {
+      if (mounted) {
+        setState(() => _fase = _Fase.listo);
+        _avisar('No se pudo empezar a grabar. Intenta de nuevo.');
+      }
+      return;
+    }
+    if (!mounted || _cam != cam) return;
     _contar(_Fase.grabando, e.duracion, _detener);
   }
 
@@ -124,15 +157,35 @@ class _PantallaCamaraState extends State<PantallaCamara> with WidgetsBindingObse
     if (cam == null || _fase != _Fase.grabando) return;
     _reloj?.cancel();
     setState(() => _fase = _Fase.guardando);
-    final archivo = await cam.stopVideoRecording();
-    final destino = '${Almacen.instancia.dirVideos.path}/crudo_${nuevoId()}.mp4';
-    await File(archivo.path).rename(destino).catchError((_) => File(archivo.path).copy(destino));
+    final String destino;
+    try {
+      final archivo = await cam.stopVideoRecording();
+      destino = '${Almacen.instancia.dirVideos.path}/crudo_${nuevoId()}.mp4';
+      try {
+        await File(archivo.path).rename(destino);
+      } on FileSystemException {
+        await File(archivo.path).copy(destino);
+        await File(archivo.path).delete();
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _fase = _Fase.listo);
+        _avisar('No se pudo guardar la grabación. Intenta de nuevo.');
+      }
+      return;
+    }
     if (!mounted) return;
     setState(() => _fase = _Fase.listo);
+    _fuera = true;
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => PantallaVistaPrevia(evento: e, grabado: destino)),
     );
-    if (mounted && _cam != null && e.modo == ModoInicio.temporizador) _esperar();
+    _fuera = false;
+    if (mounted && _cam != null && _fase == _Fase.listo && e.modo == ModoInicio.temporizador) _esperar();
+  }
+
+  void _avisar(String texto) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(texto)));
   }
 
   /// Botón en pantalla, control Bluetooth o botones de volumen.
@@ -174,7 +227,10 @@ class _PantallaCamaraState extends State<PantallaCamara> with WidgetsBindingObse
         if (evento is KeyDownEvent) _accion();
         return KeyEventResult.handled;
       },
-      child: Scaffold(
+      child: PopScope(
+        // El botón atrás no corta una grabación a medias.
+        canPop: _fase != _Fase.grabando && _fase != _Fase.guardando,
+        child: Scaffold(
         backgroundColor: Colors.black,
         body: SafeArea(
           child: Stack(
@@ -202,7 +258,30 @@ class _PantallaCamaraState extends State<PantallaCamara> with WidgetsBindingObse
                 ),
               ),
               if (_error != null)
-                Center(child: Text(_error!, style: const TextStyle(color: Colors.white))),
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.videocam_off_outlined, color: Colors.white70, size: 56),
+                        const SizedBox(height: 12),
+                        Text(_error!,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.white, fontSize: 16)),
+                        const SizedBox(height: 16),
+                        OutlinedButton(
+                          style: OutlinedButton.styleFrom(foregroundColor: Colors.white),
+                          onPressed: () {
+                            setState(() => _error = null);
+                            _iniciarCamara();
+                          },
+                          child: const Text('Reintentar'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               if (_fase == _Fase.cuenta || _fase == _Fase.esperando)
                 Center(
                   child: Column(
@@ -226,7 +305,7 @@ class _PantallaCamaraState extends State<PantallaCamara> with WidgetsBindingObse
                 child: IconButton(
                   color: Colors.white,
                   icon: const Icon(Icons.close),
-                  onPressed: _fase == _Fase.grabando ? null : () => Navigator.of(context).pop(),
+                  onPressed: _fase == _Fase.grabando || _fase == _Fase.guardando ? null : () => Navigator.of(context).pop(),
                 ),
               ),
               if (_fase == _Fase.grabando)
@@ -250,10 +329,12 @@ class _PantallaCamaraState extends State<PantallaCamara> with WidgetsBindingObse
           ),
         ),
       ),
+      ),
     );
   }
 
   Widget _boton() {
+    if (_error != null) return const SizedBox.shrink();
     if (_fase == _Fase.guardando || _fase == _Fase.preparando) {
       return const CircularProgressIndicator(color: Colors.white);
     }

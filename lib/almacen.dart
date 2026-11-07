@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'modelos.dart';
@@ -33,15 +34,65 @@ class Almacen extends ChangeNotifier {
       await d.create(recursive: true);
     }
     if (await _datos.exists()) {
-      final j = jsonDecode(await _datos.readAsString()) as Map<String, dynamic>;
-      servidor = j['servidor'] ?? '';
-      clave = j['clave'] ?? '';
-      eventos.addAll([for (final e in j['eventos'] ?? []) Evento.fromJson(e)]);
-      videos.addAll([for (final v in j['videos'] ?? []) VideoGrabado.fromJson(v)]);
+      try {
+        final j = jsonDecode(await _datos.readAsString()) as Map<String, dynamic>;
+        servidor = j['servidor'] ?? '';
+        clave = j['clave'] ?? '';
+        eventos.addAll([for (final e in j['eventos'] ?? []) Evento.fromJson(e)]);
+        videos.addAll([
+          for (final v in j['videos'] ?? []) _ubicar(VideoGrabado.fromJson(v)),
+        ]);
+      } catch (err) {
+        // Un archivo dañado no debe impedir que la app abra: se guarda aparte.
+        debugPrint('datos.json dañado: $err');
+        eventos.clear();
+        videos.clear();
+        await _datos.copy('${_datos.path}.danado');
+      }
     }
+    await _limpiarViejos();
   }
 
-  Future<void> guardar() async {
+  /// Si la carpeta de la app cambió de ruta (pasa en iPhone al actualizar),
+  /// busca el video por su nombre dentro de la carpeta actual.
+  VideoGrabado _ubicar(VideoGrabado v) {
+    if (File(v.archivo).existsSync()) return v;
+    final aqui = '${dirVideos.path}/${nombreDe(v.archivo)}';
+    if (!File(aqui).existsSync()) return v;
+    return VideoGrabado(id: v.id, eventoId: v.eventoId, archivo: aqui, creado: v.creado, estado: v.estado);
+  }
+
+  /// Los videos ya subidos se borran del celular a los 30 días, igual que en
+  /// la nube, para no llenar la memoria. Los pendientes nunca se borran.
+  /// También se borran las grabaciones sin procesar que quedaron sueltas.
+  Future<void> _limpiarViejos() async {
+    final limite = DateTime.now().subtract(const Duration(days: diasGuardado));
+    final viejos = videos.where((v) => v.estado == EstadoVideo.subido && v.creado.isBefore(limite)).toList();
+    for (final v in viejos) {
+      final f = File(v.archivo);
+      if (await f.exists()) await f.delete();
+      videos.remove(v);
+    }
+    final enUso = {for (final v in videos) v.archivo};
+    for (final f in dirVideos.listSync().whereType<File>()) {
+      if (!enUso.contains(f.path) && f.statSync().modified.isBefore(DateTime.now().subtract(const Duration(days: 1)))) {
+        await f.delete();
+      }
+    }
+    if (viejos.isNotEmpty) await guardar();
+  }
+
+  Future<void> _guardando = Future.value();
+
+  /// Guarda en orden: dos guardados al mismo tiempo (por ejemplo una subida
+  /// que termina mientras se acepta otro video) no deben pisarse.
+  Future<void> guardar() {
+    final siguiente = _guardando.catchError((_) {}).then((_) => _escribir());
+    _guardando = siguiente;
+    return siguiente;
+  }
+
+  Future<void> _escribir() async {
     final tmp = File('${_datos.path}.tmp');
     await tmp.writeAsString(jsonEncode({
       'servidor': servidor,
@@ -107,11 +158,16 @@ class Almacen extends ChangeNotifier {
 
   Future<void> eliminar(File f) async {
     await f.delete();
+    // Si luego se importa otro archivo con el mismo nombre, que no salga la imagen vieja.
+    await FileImage(f).evict();
     notifyListeners();
   }
 
   String? rutaMarco(String? nombre) => nombre == null ? null : '${dirMarcos.path}/$nombre';
   String? rutaCancion(String? nombre) => nombre == null ? null : '${dirMusica.path}/$nombre';
 }
+
+/// Días que se guardan los videos (en la nube y en el celular).
+const diasGuardado = 30;
 
 String nombreDe(String ruta) => ruta.split(Platform.pathSeparator).last;

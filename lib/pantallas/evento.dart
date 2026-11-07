@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -65,7 +67,7 @@ class PantallaEvento extends StatelessWidget {
               const SizedBox(height: 8),
               if (videos.isEmpty)
                 const Text('Aún no hay videos.', style: TextStyle(color: Marles.tintaSuave)),
-              for (final v in videos)
+              for (final (i, v) in videos.indexed)
                 Card(
                   margin: const EdgeInsets.only(bottom: 8),
                   child: ListTile(
@@ -73,7 +75,7 @@ class PantallaEvento extends StatelessWidget {
                       v.estado == EstadoVideo.subido ? Icons.cloud_done_outlined : Icons.cloud_upload_outlined,
                       color: v.estado == EstadoVideo.subido ? Marles.turquesaProfundo : Marles.rojo,
                     ),
-                    title: Text('Video ${v.id}'),
+                    title: Text('Video ${videos.length - i}'),
                     subtitle: Text(
                       '${horaCorta(v.creado)} · '
                       '${v.estado == EstadoVideo.subido ? 'en línea' : 'pendiente de subir'}',
@@ -132,10 +134,18 @@ class _Resumen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final a = Almacen.instancia;
+    // Si el marco o la canción se borraron de la biblioteca, se avisa aquí
+    // antes de grabar (si no, el video saldría sin ellos sin decir nada).
+    String archivo(String? nombre, String? ruta, String vacio) {
+      if (nombre == null) return vacio;
+      return File(ruta!).existsSync() ? nombre : '$nombre (ya no está en la biblioteca)';
+    }
+
     final filas = <(IconData, String)>[
       (Icons.event, fechaCorta(evento.fecha)),
-      (Icons.filter_frames_outlined, evento.marco ?? 'Sin marco'),
-      (Icons.music_note_outlined, evento.cancion ?? 'Sin canción'),
+      (Icons.filter_frames_outlined, archivo(evento.marco, a.rutaMarco(evento.marco), 'Sin marco')),
+      (Icons.music_note_outlined, archivo(evento.cancion, a.rutaCancion(evento.cancion), 'Sin canción')),
       (Icons.timer_outlined,
           '${evento.duracion} s · ${evento.modo == ModoInicio.boton ? 'botón' : 'temporizador'} · '
               'cuenta ${evento.cuentaRegresiva} s'),

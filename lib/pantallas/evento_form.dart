@@ -1,5 +1,6 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../almacen.dart';
 import '../modelos.dart';
@@ -24,6 +25,13 @@ class _PantallaEventoFormState extends State<PantallaEventoForm> {
       : Evento.fromJson(widget.evento!.toJson());
   late final _nombre = TextEditingController(text: e.nombre);
   late final _inicio = TextEditingController(text: '${e.cancionInicio}');
+
+  @override
+  void dispose() {
+    _nombre.dispose();
+    _inicio.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -62,6 +70,7 @@ class _PantallaEventoFormState extends State<PantallaEventoForm> {
             TextField(
               controller: _inicio,
               keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               decoration: const InputDecoration(labelText: 'Empezar la canción en el segundo', suffixText: 's'),
             ),
             const SizedBox(height: 8),
@@ -164,7 +173,7 @@ class _PantallaEventoFormState extends State<PantallaEventoForm> {
               final f = await FilePicker.pickFile(type: FileType.custom, allowedExtensions: ['png']);
               if (f?.path == null) return;
               final nombre = await a.importar(f!.path!, a.dirMarcos);
-              setState(() => e.marco = nombre);
+              if (mounted) setState(() => e.marco = nombre);
             },
             child: const Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -199,6 +208,8 @@ class _PantallaEventoFormState extends State<PantallaEventoForm> {
       children: [
         Expanded(
           child: DropdownButtonFormField<String?>(
+            // La clave hace que se vea la canción recién importada.
+            key: ValueKey(e.cancion),
             initialValue: canciones.contains(e.cancion) ? e.cancion : null,
             isExpanded: true,
             items: [
@@ -215,7 +226,7 @@ class _PantallaEventoFormState extends State<PantallaEventoForm> {
             final f = await FilePicker.pickFile(type: FileType.custom, allowedExtensions: extensionesMusica);
             if (f?.path == null) return;
             final nombre = await a.importar(f!.path!, a.dirMusica);
-            setState(() => e.cancion = nombre);
+            if (mounted) setState(() => e.cancion = nombre);
           },
         ),
       ],

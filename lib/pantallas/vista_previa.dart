@@ -38,6 +38,8 @@ class _PantallaVistaPreviaState extends State<PantallaVistaPrevia> {
     super.dispose();
   }
 
+  bool _cerrando = false;
+
   Future<void> _procesar() async {
     try {
       final f = await Procesador.procesar(
@@ -48,18 +50,22 @@ class _PantallaVistaPreviaState extends State<PantallaVistaPrevia> {
           if (mounted) setState(() => _avance = x);
         },
       );
+      if (!mounted || _cerrando) return;
       final v = VideoPlayerController.file(f);
       await v.initialize();
       await v.setLooping(true);
       await v.play();
-      if (!mounted) {
+      if (!mounted || _cerrando) {
         await v.dispose();
         return;
       }
       setState(() => _video = v);
     } on ErrorProcesando catch (err) {
       debugPrint(err.detalle);
-      if (mounted) setState(() => _error = 'No se pudo procesar el video.');
+      if (mounted && !_cerrando) setState(() => _error = 'No se pudo procesar el video. Toca Repetir para grabar otra vez.');
+    } catch (err) {
+      debugPrint('$err');
+      if (mounted && !_cerrando) setState(() => _error = 'No se pudo mostrar el video. Toca Repetir para grabar otra vez.');
     }
   }
 
@@ -69,6 +75,9 @@ class _PantallaVistaPreviaState extends State<PantallaVistaPrevia> {
   }
 
   Future<void> _repetir() async {
+    if (_cerrando) return;
+    _cerrando = true;
+    await Procesador.cancelar();
     await _video?.pause();
     await _borrar(widget.grabado);
     await _borrar(_salida);
@@ -76,6 +85,8 @@ class _PantallaVistaPreviaState extends State<PantallaVistaPrevia> {
   }
 
   Future<void> _aceptar() async {
+    if (_cerrando) return;
+    _cerrando = true;
     await _video?.pause();
     await _borrar(widget.grabado);
     final a = Almacen.instancia;
@@ -93,7 +104,13 @@ class _PantallaVistaPreviaState extends State<PantallaVistaPrevia> {
   @override
   Widget build(BuildContext context) {
     final v = _video;
-    return Scaffold(
+    // El botón atrás del teléfono hace lo mismo que Repetir (no deja archivos sueltos).
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (hecho, _) {
+        if (!hecho) _repetir();
+      },
+      child: Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
         child: Column(
@@ -103,7 +120,12 @@ class _PantallaVistaPreviaState extends State<PantallaVistaPrevia> {
                 child: v != null
                     ? AspectRatio(aspectRatio: v.value.aspectRatio, child: VideoPlayer(v))
                     : _error != null
-                        ? Text(_error!, style: const TextStyle(color: Colors.white, fontSize: 18))
+                        ? Padding(
+                            padding: const EdgeInsets.all(32),
+                            child: Text(_error!,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: Colors.white, fontSize: 18)),
+                          )
                         : Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -154,6 +176,7 @@ class _PantallaVistaPreviaState extends State<PantallaVistaPrevia> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

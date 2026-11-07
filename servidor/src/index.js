@@ -21,7 +21,9 @@ export default {
       }
       if (tipo === 'e' && ID.test(evento ?? '')) {
         const videos = await listarVideos(env, evento);
-        if (videos.length === 0) return html(paginaNoEncontrado(), 404);
+        if (videos.length === 0) {
+          return html(paginaNoEncontrado('Esta galería aún no tiene videos, o ya pasaron los 30 días en que se guardan.'), 404);
+        }
         const datos = await datosEvento(env, evento);
         return html(paginaEvento({ evento, nombre: datos?.nombre, videos }));
       }
@@ -120,8 +122,10 @@ async function servirVideo(request, env, evento, id, descargar) {
 
   let status = 200;
   if (obj.range && request.headers.has('range')) {
-    const inicio = obj.range.offset ?? 0;
-    const largo = obj.range.length ?? obj.size - inicio;
+    // R2 devuelve {offset, length} o {suffix} (los últimos N bytes, como pide Safari).
+    const r = obj.range;
+    const inicio = 'suffix' in r ? Math.max(0, obj.size - r.suffix) : (r.offset ?? 0);
+    const largo = 'suffix' in r ? obj.size - inicio : (r.length ?? obj.size - inicio);
     headers.set('content-range', `bytes ${inicio}-${inicio + largo - 1}/${obj.size}`);
     headers.set('content-length', String(largo));
     status = 206;

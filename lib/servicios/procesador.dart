@@ -28,7 +28,9 @@ class Procesador {
   }) async {
     final almacen = Almacen.instancia;
     final info = await _info(grabado);
-    final duracion = info.duracion.clamp(1.0, evento.duracion.toDouble());
+    // Si no se pudo leer la duración, se usa la del evento (antes salía 1 s).
+    final medida = info.duracion > 0 ? info.duracion : evento.duracion.toDouble();
+    final duracion = medida.clamp(1.0, evento.duracion.toDouble());
 
     final args = <String>['-y', '-i', grabado];
     var siguiente = 1;
@@ -43,7 +45,7 @@ class Procesador {
     final cancion = almacen.rutaCancion(evento.cancion);
     int? iCancion;
     if (cancion != null && File(cancion).existsSync()) {
-      args.addAll(['-ss', '${evento.cancionInicio}', '-stream_loop', '-1', '-i', cancion]);
+      args.addAll(['-ss', '${evento.cancionInicio.clamp(0, 3600)}', '-stream_loop', '-1', '-i', cancion]);
       iCancion = siguiente++;
     }
 
@@ -101,6 +103,9 @@ class Procesador {
     }
     return File(salida);
   }
+
+  /// Detiene el procesado en curso (por ejemplo al tocar Repetir).
+  static Future<void> cancelar() => FFmpegKit.cancel();
 
   static Future<({double duracion, bool tieneAudio})> _info(String ruta) async {
     final sesion = await FFprobeKit.getMediaInformation(ruta);

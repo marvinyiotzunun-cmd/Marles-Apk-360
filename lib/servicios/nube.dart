@@ -17,6 +17,9 @@ class Nube {
   static const _limiteDirecto = 90 * 1024 * 1024;
   static const _tamParte = 50 * 1024 * 1024;
 
+  /// Tiempo máximo para los pedidos cortos; con mala señal no se queda colgado.
+  static const _espera = Duration(seconds: 30);
+
   final _enCurso = <String, Future<void>>{};
 
   Almacen get _a => Almacen.instancia;
@@ -55,6 +58,7 @@ class Nube {
   Future<void> _subir(VideoGrabado v, void Function(double)? alAvanzar) async {
     if (!_a.nubeLista) throw StateError('Falta configurar la nube en Ajustes');
     final archivo = File(v.archivo);
+    if (!await archivo.exists()) throw StateError('El archivo del video ya no está en el celular');
     final tam = await archivo.length();
     v.estado = EstadoVideo.subiendo;
 
@@ -65,7 +69,7 @@ class Nube {
           Uri.parse('$_base/api/evento/${v.eventoId}'),
           headers: {..._auth, 'Content-Type': 'application/json'},
           body: jsonEncode({'nombre': evento.nombre, 'fecha': evento.fecha.toIso8601String()}),
-        ));
+        ).timeout(_espera));
       }
 
       final ruta = '${v.eventoId}/${v.id}';
@@ -73,7 +77,7 @@ class Nube {
         await _enviar('PUT', Uri.parse('$_base/api/subir/$ruta'), archivo, 0, tam,
             (n) => alAvanzar?.call(n / tam));
       } else {
-        final crear = await http.post(Uri.parse('$_base/api/mpu/crear/$ruta'), headers: _auth);
+        final crear = await http.post(Uri.parse('$_base/api/mpu/crear/$ruta'), headers: _auth).timeout(_espera);
         final uploadId = jsonDecode(_revisar(crear))['uploadId'] as String;
         final partes = <Map<String, dynamic>>[];
         var enviado = 0;
@@ -90,7 +94,7 @@ class Nube {
           Uri.parse('$_base/api/mpu/completar/$ruta').replace(queryParameters: {'uploadId': uploadId}),
           headers: {..._auth, 'Content-Type': 'application/json'},
           body: jsonEncode({'partes': partes}),
-        ));
+        ).timeout(_espera));
       }
       v.estado = EstadoVideo.subido;
     } catch (_) {
@@ -103,21 +107,21 @@ class Nube {
 
   Future<String> _enviar(String metodo, Uri uri, File archivo, int inicio, int fin,
       void Function(int enviados) alAvanzar) async {
-    final req = http.StreamedRequest(metodo, uri)
+    var enviados = 0;
+    // El archivo se lee a medida que la red lo va enviando, así el avance que
+    // ve el invitado es real y no se carga el video entero en memoria.
+    final datos = archivo.openRead(inicio, fin).map((trozo) {
+      enviados += trozo.length;
+      alAvanzar(enviados);
+      return trozo;
+    });
+    final req = _SubidaArchivo(metodo, uri, datos)
       ..headers.addAll({..._auth, 'Content-Type': 'video/mp4'})
       ..contentLength = fin - inicio;
     final cliente = http.Client();
     try {
-      final respuesta = cliente.send(req);
-      var enviados = 0;
-      await for (final trozo in archivo.openRead(inicio, fin)) {
-        req.sink.add(trozo);
-        enviados += trozo.length;
-        alAvanzar(enviados);
-      }
-      await req.sink.close();
-      final r = await http.Response.fromStream(await respuesta.timeout(const Duration(minutes: 5)));
-      return _revisar(r);
+      final respuesta = await cliente.send(req).timeout(const Duration(minutes: 20));
+      return _revisar(await http.Response.fromStream(respuesta).timeout(_espera));
     } finally {
       cliente.close();
     }
@@ -142,5 +146,17 @@ class Nube {
     } catch (e) {
       return 'No se pudo conectar: $e';
     }
+  }
+}
+
+/// Pedido cuyo cuerpo sale directamente de un archivo.
+class _SubidaArchivo extends http.BaseRequest {
+  _SubidaArchivo(super.method, super.url, this._datos);
+  final Stream<List<int>> _datos;
+
+  @override
+  http.ByteStream finalize() {
+    super.finalize();
+    return http.ByteStream(_datos);
   }
 }

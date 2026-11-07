@@ -18,18 +18,45 @@ class _PantallaAjustesState extends State<PantallaAjustes> {
   String? _resultado;
   bool _probando = false;
 
+  bool _bien = false;
+
+  /// Acepta la dirección con o sin https:// y con / al final.
+  static String _normalizar(String t) {
+    var d = t.trim().replaceAll(RegExp(r'/+$'), '');
+    if (d.isNotEmpty && !d.startsWith(RegExp(r'https?://'))) d = 'https://$d';
+    return d;
+  }
+
   Future<void> _guardarYProbar() async {
-    a.servidor = _servidor.text.trim();
+    FocusScope.of(context).unfocus();
+    a.servidor = _normalizar(_servidor.text);
     a.clave = _clave.text.trim();
+    _servidor.text = a.servidor;
     await a.guardar();
+    if (!mounted) return;
+    if (!a.nubeLista) {
+      setState(() {
+        _bien = false;
+        _resultado = 'Escribe la dirección del servidor y la clave.';
+      });
+      return;
+    }
     setState(() => _probando = true);
     final error = await Nube.instancia.probar();
     if (!mounted) return;
     setState(() {
       _probando = false;
+      _bien = error == null;
       _resultado = error ?? 'Conexión correcta. Ya puedes entregar videos por QR.';
     });
     if (error == null) Nube.instancia.subirPendientes();
+  }
+
+  @override
+  void dispose() {
+    _servidor.dispose();
+    _clave.dispose();
+    super.dispose();
   }
 
   @override
@@ -55,6 +82,8 @@ class _PantallaAjustesState extends State<PantallaAjustes> {
           TextField(
             controller: _clave,
             obscureText: true,
+            autocorrect: false,
+            enableSuggestions: false,
             decoration: const InputDecoration(labelText: 'Clave de subida'),
           ),
           const SizedBox(height: 16),
@@ -64,7 +93,15 @@ class _PantallaAjustesState extends State<PantallaAjustes> {
           ),
           if (_resultado != null) ...[
             const SizedBox(height: 12),
-            Text(_resultado!),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(_bien ? Icons.check_circle : Icons.error_outline,
+                    color: _bien ? Marles.turquesaProfundo : Marles.rojo),
+                const SizedBox(width: 8),
+                Expanded(child: Text(_resultado!)),
+              ],
+            ),
           ],
         ],
       ),
