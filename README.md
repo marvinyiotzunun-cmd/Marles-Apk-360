@@ -24,3 +24,4 @@ Sigue [GUIA-CLOUDFLARE.md](GUIA-CLOUDFLARE.md). Se hace una sola vez.
 3. **Abrir cámara**: graba con el botón rojo, el control Bluetooth o los botones de volumen.
 4. Revisa la vista previa, toca **Aceptar** y el invitado escanea el QR.
 5. Sin señal, el video queda guardado y se sube solo cuando vuelve el internet. Mientras tanto puedes compartirlo por Bluetooth o Quick Share.
+6. Los videos ya subidos se borran del celular a los 30 días, igual que en la nube. Los que siguen pendientes de subir nunca se borran solos.

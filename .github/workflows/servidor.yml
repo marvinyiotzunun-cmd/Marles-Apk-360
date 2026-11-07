@@ -37,4 +37,8 @@ jobs:
       - name: Publicar
         run: npx wrangler deploy
       - name: Guardar clave de subida
-        run: echo "${{ secrets.MARLES_CLAVE }}" | npx wrangler secret put CLAVE
+        # printf (no echo) para que la clave no lleve un salto de línea al final:
+        # con él, la clave del servidor nunca coincidiría con la de la app.
+        env:
+          MARLES_CLAVE: ${{ secrets.MARLES_CLAVE }}
+        run: printf '%s' "$MARLES_CLAVE" | npx wrangler secret put CLAVE

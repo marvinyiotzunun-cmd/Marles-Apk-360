@@ -34,7 +34,7 @@ video{width:100%;border-radius:16px;background:#000;display:block}
 .nota{color:var(--suave);font-size:13px;text-align:center;margin-top:10px}
 footer{padding:16px;text-align:center;color:var(--turq-prof);font-size:14px;font-weight:500}
 .carrusel{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:8px}
-.carrusel video{flex:0 0 78%;scroll-snap-align:center}
+.carrusel a{flex:0 0 78%;scroll-snap-align:center}
 .rejilla{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:16px}
 .rejilla a{display:block;aspect-ratio:9/16;border-radius:8px;overflow:hidden;background:#000}
 .rejilla video{height:100%;object-fit:cover;border-radius:0}
@@ -102,9 +102,9 @@ export function paginaEvento({ evento, nombre, videos }) {
   const cuerpo = `${cabecera(nombre)}
 <main>
   <div class="carrusel">
-    ${destacados.map((v) => `<video src="${fuente(v)}#t=0.1" muted loop playsinline preload="metadata"></video>`).join('')}
+    ${destacados.map((v) => `<a href="/v/${evento}/${v.id}"><video src="${fuente(v)}#t=0.1" muted loop playsinline preload="metadata"></video></a>`).join('')}
   </div>
-  <h2>${videos.length} videos</h2>
+  <h2>${videos.length === 1 ? '1 video' : `${videos.length} videos`}</h2>
   <div class="rejilla">
     ${videos.map((v) => `<a href="/v/${evento}/${v.id}"><video src="${fuente(v)}#t=0.1" muted playsinline preload="metadata"></video></a>`).join('')}
   </div>
@@ -119,9 +119,9 @@ export function paginaEvento({ evento, nombre, videos }) {
   return base(nombre ? `${nombre} · MarLes 360` : 'Galería · MarLes 360', cuerpo, script);
 }
 
-export function paginaNoEncontrado() {
+export function paginaNoEncontrado(mensaje = 'Este video ya no está disponible. Los videos se guardan durante 30 días.') {
   return base(
     'Video no disponible · MarLes 360',
-    `${cabecera()}<main><p class="nota" style="font-size:16px;margin-top:40px">Este video ya no está disponible. Los videos se guardan durante 30 días.</p></main>`,
+    `${cabecera()}<main><p class="nota" style="font-size:16px;margin-top:40px">${escapar(mensaje)}</p></main>`,
   );
 }
