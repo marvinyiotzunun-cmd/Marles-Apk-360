@@ -8,6 +8,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../almacen.dart';
 import '../modelos.dart';
+import '../servicios/procesador.dart';
 import '../tema.dart';
 import '../utiles/formato.dart';
 import 'vista_previa.dart';
@@ -368,7 +369,9 @@ class _Visor extends StatelessWidget {
                   child: CameraPreview(cam),
                 ),
               ),
-            if (marco != null && File(marco).existsSync()) Image.file(File(marco), fit: BoxFit.fill),
+            // cacheWidth: un PNG enorme se lee al tamaño del video y no llena la memoria.
+            if (marco != null && File(marco).existsSync())
+              Image.file(File(marco), fit: BoxFit.fill, cacheWidth: Procesador.ancho),
           ],
         ),
       ),

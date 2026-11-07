@@ -52,6 +52,9 @@ Future<String?> _importar(BuildContext context, List<String> extensiones, Direct
   } catch (_) {
     if (context.mounted) _avisar(context, 'No se pudo importar el archivo.');
     return null;
+  } finally {
+    // El selector deja una copia de cada archivo elegido; ya está en la biblioteca.
+    await FilePicker.clearTemporaryFiles().catchError((_) {});
   }
 }
 

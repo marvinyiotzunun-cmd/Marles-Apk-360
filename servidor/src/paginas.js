@@ -80,15 +80,22 @@ export function paginaVideo({ evento, id, nombre }) {
   const src = ${JSON.stringify(src)};
   const boton = document.getElementById('wa');
   let archivo = null;
-  // Se descarga el video en segundo plano para poder compartirlo como archivo.
-  fetch(src).then(r => {
-    const tam = Number(r.headers.get('content-length') || 0);
-    if (!r.ok || tam > ${LIMITE_COMPARTIR}) throw new Error('grande');
-    return r.blob();
-  }).then(b => {
-    const f = new File([b], 'marles360-${id}.mp4', { type: 'video/mp4' });
-    if (navigator.canShare && navigator.canShare({ files: [f] })) archivo = f;
-  }).catch(() => {}).finally(() => boton.setAttribute('aria-busy', 'false'));
+  const puedeArchivos = (f) => { try { return !!navigator.canShare && navigator.canShare({ files: [f] }); } catch { return false; } };
+  // Si el teléfono puede compartir archivos, el video se descarga en segundo
+  // plano para mandarlo como archivo. Si no puede (una computadora, un teléfono
+  // viejo), no se gastan los datos del invitado: se comparte el enlace.
+  if (puedeArchivos(new File([''], 'prueba.mp4', { type: 'video/mp4' }))) {
+    fetch(src).then(r => {
+      const tam = Number(r.headers.get('content-length') || 0);
+      if (!r.ok || tam > ${LIMITE_COMPARTIR}) throw new Error('grande');
+      return r.blob();
+    }).then(b => {
+      const f = new File([b], 'marles360-${id}.mp4', { type: 'video/mp4' });
+      if (puedeArchivos(f)) archivo = f;
+    }).catch(() => {}).finally(() => boton.setAttribute('aria-busy', 'false'));
+  } else {
+    boton.setAttribute('aria-busy', 'false');
+  }
 
   boton.addEventListener('click', async () => {
     if (archivo) {

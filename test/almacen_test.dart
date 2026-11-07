@@ -1,9 +1,11 @@
 // Lo que la app guarda en el celular: que no se pierda nada al cerrarla, que
 // un archivo dañado no la deje sin abrir y que la limpieza de 30 días borre
 // solo lo que debe.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:marles360/almacen.dart';
 import 'package:marles360/modelos.dart';
@@ -94,7 +96,11 @@ void main() {
     final hace = ahora.subtract(const Duration(days: diasGuardado + 1));
     final viejoSubido = video('aaaa2222', creado: hace, estado: EstadoVideo.subido);
     final viejoPendiente = video('bbbb2222', creado: hace.subtract(const Duration(days: 20)));
-    final recienSubido = video('cccc2222', creado: ahora.subtract(const Duration(days: 29)), estado: EstadoVideo.subido);
+    final recienSubido = video(
+      'cccc2222',
+      creado: ahora.subtract(const Duration(days: 29)),
+      estado: EstadoVideo.subido,
+    );
     a.videos.addAll([viejoSubido, viejoPendiente, recienSubido]);
     await a.guardar();
 
@@ -109,10 +115,9 @@ void main() {
   });
 
   test('los archivos sueltos se limpian sin tocar lo que se está grabando', () async {
-    File suelto(String nombre, Duration edad) =>
-        File('${a.dirVideos.path}/$nombre')
-          ..writeAsBytesSync([0])
-          ..setLastModifiedSync(ahora.subtract(edad));
+    File suelto(String nombre, Duration edad) => File('${a.dirVideos.path}/$nombre')
+      ..writeAsBytesSync([0])
+      ..setLastModifiedSync(ahora.subtract(edad));
     final crudoViejo = suelto('crudo_aaaa2222.mp4', const Duration(days: 2));
     final crudoNuevo = suelto('crudo_bbbb2222.mp4', const Duration(minutes: 5));
     final terminadoViejo = suelto('abc234_cccc2222.mp4', const Duration(days: diasGuardado + 2));
@@ -173,6 +178,26 @@ void main() {
     expect(a.marcos, hasLength(2));
     // Si se vuelve a importar, toma el nombre que quedó libre.
     expect(await a.importar('${origen.path}/marco.boda.png', a.dirMarcos), 'marco.boda (2).png');
+  });
+
+  test('al eliminar un marco no queda su miniatura en memoria', () async {
+    // PNG de 1 x 1.
+    final png = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    );
+    final f = File('${a.dirMarcos.path}/boda.png')..writeAsBytesSync(png);
+    // Así la pide la pantalla del evento (miniatura de 270 de ancho).
+    final miniatura = ResizeImage(FileImage(f), width: 270);
+    final cargada = Completer<void>();
+    final escucha = ImageStreamListener((_, _) => cargada.complete());
+    final flujo = miniatura.resolve(ImageConfiguration.empty)..addListener(escucha);
+    await cargada.future;
+    flujo.removeListener(escucha);
+    final clave = await miniatura.obtainKey(ImageConfiguration.empty);
+    expect(PaintingBinding.instance.imageCache.containsKey(clave), isTrue);
+
+    await a.eliminar(f);
+    expect(PaintingBinding.instance.imageCache.containsKey(clave), isFalse);
   });
 
   test('avisa cuando un evento usa un marco o canción que ya no está', () async {

@@ -39,7 +39,21 @@ Future<({Map<String, dynamic>? video, Map<String, dynamic>? audio, double duraci
 /// Volumen medio (dB) de un tramo del audio, opcionalmente solo de una nota.
 Future<double> _volumen(String ruta, {required double desde, double largo = 0.3, int? nota}) async {
   final filtro = [if (nota != null) 'bandpass=f=$nota:width_type=h:width=60', 'volumedetect'].join(',');
-  final log = await _ffmpeg(['-ss', '$desde', '-t', '$largo', '-i', ruta, '-map', '0:a', '-af', filtro, '-f', 'null', '-']);
+  final log = await _ffmpeg([
+    '-ss',
+    '$desde',
+    '-t',
+    '$largo',
+    '-i',
+    ruta,
+    '-map',
+    '0:a',
+    '-af',
+    filtro,
+    '-f',
+    'null',
+    '-',
+  ]);
   final m = RegExp(r'mean_volume: (-?[\d.]+|-inf) dB').firstMatch(log);
   expect(m, isNotNull, reason: log);
   return m!.group(1) == '-inf' ? -200 : double.parse(m.group(1)!);
@@ -168,7 +182,17 @@ void main() {
 
     // Canción de 2 segundos (más corta que los videos) en MP3.
     cancion = _ruta('cancion.mp3');
-    await _ffmpeg(['-loglevel', 'error', '-f', 'lavfi', '-i', 'sine=frequency=660:sample_rate=44100', '-t', '2', cancion]);
+    await _ffmpeg([
+      '-loglevel',
+      'error',
+      '-f',
+      'lavfi',
+      '-i',
+      'sine=frequency=660:sample_rate=44100',
+      '-t',
+      '2',
+      cancion,
+    ]);
 
     // Marco PNG con borde rojo y el centro transparente.
     marco = _ruta('marco.png');
@@ -248,7 +272,13 @@ void main() {
     await _esVideoFinal(mudo, duracion: 3, conAudio: false);
 
     // Aunque el evento pida mezclar el sonido original, no hay cuál: solo la canción.
-    final conCancion = await _procesar(sinMicrofono, duracion: 3, tieneAudio: false, cancion: cancion, volumenOriginal: 60);
+    final conCancion = await _procesar(
+      sinMicrofono,
+      duracion: 3,
+      tieneAudio: false,
+      cancion: cancion,
+      volumenOriginal: 60,
+    );
     await _esVideoFinal(conCancion, duracion: 3, conAudio: true);
     expect(await _volumen(conCancion, desde: 1, nota: 660), greaterThan(-30));
   });

@@ -99,15 +99,19 @@ class PantallaInicio extends StatelessWidget {
   }
 
   Future<void> _subirAhora(BuildContext context) async {
-    final mensajero = ScaffoldMessenger.of(context);
-    mensajero.showSnackBar(const SnackBar(content: Text('Subiendo videos pendientes…')));
+    // clearSnackBars: si quedaba un aviso anterior, este no espera a que se quite solo.
+    final mensajero = ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(const SnackBar(content: Text('Subiendo videos pendientes…')));
     final n = await Nube.instancia.subirPendientes();
+    // Si no subió ninguno, se dice por qué (sin señal, la clave, el servidor...).
+    final problema = n > 0
+        ? null
+        : await Nube.instancia.probar() ?? 'No se pudo subir. Intenta de nuevo en un momento.';
     mensajero
-      ..hideCurrentSnackBar()
+      ..clearSnackBars()
       ..showSnackBar(
-        SnackBar(
-          content: Text(n > 0 ? 'Se ${n == 1 ? 'subió' : 'subieron'} ${cantidad(n, 'video')}.' : 'Aún sin señal.'),
-        ),
+        SnackBar(content: Text(problema ?? 'Se ${n == 1 ? 'subió' : 'subieron'} ${cantidad(n, 'video')}.')),
       );
   }
 

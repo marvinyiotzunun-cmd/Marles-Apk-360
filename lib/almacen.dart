@@ -184,8 +184,12 @@ class Almacen extends ChangeNotifier {
 
   Future<void> eliminar(File f) async {
     await f.delete();
-    // Si luego se importa otro archivo con el mismo nombre, que no salga la imagen vieja.
-    await FileImage(f).evict();
+    // Si luego se importa otro archivo con el mismo nombre, que no salga la
+    // imagen vieja. Las miniaturas quedan en memoria en varios tamaños (no solo
+    // como FileImage), así que se vacía todo; se vuelven a leer al verse.
+    PaintingBinding.instance.imageCache
+      ..clear()
+      ..clearLiveImages();
     notifyListeners();
   }
 

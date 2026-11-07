@@ -144,11 +144,15 @@ class PantallaEvento extends StatelessWidget {
   }
 
   Future<bool> _confirmar(BuildContext context) async {
+    final sinSubir = Almacen.instancia.videosDe(evento.id).where((v) => v.estado != EstadoVideo.subido).length;
     return await showDialog<bool>(
           context: context,
           builder: (c) => AlertDialog(
             title: const Text('¿Borrar este evento?'),
-            content: const Text('Se borran también sus videos guardados en este celular.'),
+            content: Text(
+              'Se borran también sus videos guardados en este celular.'
+              '${sinSubir == 0 ? '' : ' ${sinSubir == 1 ? 'Un video aún no se ha subido y se perderá.' : '$sinSubir videos aún no se han subido y se perderán.'}'}',
+            ),
             actions: [
               TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancelar')),
               TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Borrar')),

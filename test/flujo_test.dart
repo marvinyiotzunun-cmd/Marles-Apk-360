@@ -3,6 +3,7 @@
 // También lo que pasa en un evento real: atrás a media grabación, el control
 // Bluetooth, la cámara que se cae, la app que se va a segundo plano y la
 // falta de señal.
+import 'dart:async';
 import 'dart:io';
 
 import 'package:camera_platform_interface/camera_platform_interface.dart';
@@ -13,6 +14,9 @@ import 'package:marles360/almacen.dart';
 import 'package:marles360/modelos.dart';
 import 'package:marles360/pantallas/camara.dart';
 import 'package:marles360/pantallas/entrega.dart';
+import 'package:marles360/pantallas/evento.dart';
+import 'package:marles360/pantallas/evento_form.dart';
+import 'package:marles360/pantallas/inicio.dart';
 import 'package:marles360/pantallas/vista_previa.dart';
 import 'package:marles360/servicios/nube.dart';
 import 'package:marles360/servicios/procesador.dart';
@@ -401,5 +405,89 @@ void main() {
     expect(s.archivosVideos, isEmpty);
     await _hastaQue(tester, () => _hay(find.bySemanticsLabel('Grabar')), 'de vuelta en la cámara');
     semantica.dispose();
+  });
+
+  testWidgets('tocar Guardar dos veces crea un solo evento y vuelve una sola pantalla', (tester) async {
+    await _preparar(tester);
+    await tester.pumpWidget(
+      app(
+        Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: TextButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const Scaffold(body: Center(child: Text('Pantalla anterior'))),
+                  ),
+                ),
+                child: const Text('Abrir'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Abrir'));
+    await _quieto(tester);
+    final navegador = tester.state<NavigatorState>(find.byType(Navigator));
+    unawaited(navegador.push(MaterialPageRoute<Evento>(builder: (_) => const PantallaEventoForm())));
+    await _quieto(tester);
+    await tester.enterText(find.byType(TextField).first, 'XV de Sofía');
+
+    await tester.tap(_boton('Guardar'));
+    await tester.tap(_boton('Guardar'));
+    await _hastaQue(tester, () => !_hay(find.byType(PantallaEventoForm)), 'el formulario cerrado');
+    await _quieto(tester);
+    expect(find.text('Pantalla anterior'), findsOneWidget);
+    expect(Almacen.instancia.eventos.single.nombre, 'XV de Sofía');
+    // Diez letras: la dirección de la galería no se puede adivinar.
+    expect(Almacen.instancia.eventos.single.id, hasLength(10));
+  });
+
+  testWidgets('borrar un evento avisa si tiene videos sin subir', (tester) async {
+    await _preparar(tester);
+    final e = _evento();
+    final a = Almacen.instancia;
+    for (final (i, estado) in [EstadoVideo.subido, EstadoVideo.pendiente, EstadoVideo.pendiente].indexed) {
+      final f = File('${a.dirVideos.path}/abc234_v${i}aaaaaa.mp4')..writeAsBytesSync([1]);
+      a.videos.add(
+        VideoGrabado(id: 'v${i}aaaaaa', eventoId: e.id, archivo: f.path, creado: DateTime.now(), estado: estado),
+      );
+    }
+    await tester.pumpWidget(app(PantallaEvento(evento: e)));
+    await _quieto(tester);
+    await tester.tap(find.byTooltip('Más opciones'));
+    await _quieto(tester);
+    await tester.tap(find.text('Borrar evento'));
+    await _quieto(tester);
+    expect(find.textContaining('2 videos aún no se han subido y se perderán.'), findsOneWidget);
+    await tester.tap(_boton('Cancelar'));
+    await _quieto(tester);
+    expect(a.eventos, [e]);
+    expect(a.videos, hasLength(3));
+  });
+
+  testWidgets('Subir ahora dice por qué no se pudo subir', (tester) async {
+    final s = await _preparar(tester);
+    final e = _evento();
+    final a = Almacen.instancia;
+    final f = File('${a.dirVideos.path}/abc234_v1aaaaaa.mp4')..writeAsBytesSync([1]);
+    a.videos.add(VideoGrabado(id: 'v1aaaaaa', eventoId: e.id, archivo: f.path, creado: DateTime.now()));
+    Nube.instancia = s.nube = NubeFalsa(
+      error: ErrorServidor(401, 'Clave incorrecta'),
+      resultadoPrueba: 'La clave no coincide con la del servidor.',
+    );
+    await tester.pumpWidget(app(const PantallaInicio()));
+    await _quieto(tester);
+    expect(find.text('1 video esperando señal para subir.'), findsOneWidget);
+
+    await tester.tap(_boton('Subir ahora'));
+    await _hastaQue(tester, () => _hay(find.text('La clave no coincide con la del servidor.')), 'el motivo');
+
+    // Con la clave arreglada sí sube.
+    Nube.instancia = s.nube = NubeFalsa();
+    await tester.tap(_boton('Subir ahora'));
+    await _hastaQue(tester, () => _hay(find.text('Se subió 1 video.')), 'el aviso de subida');
+    expect(s.nube.subidos, ['v1aaaaaa']);
   });
 }

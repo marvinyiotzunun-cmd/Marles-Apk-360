@@ -62,8 +62,15 @@ class Nube {
       try {
         await subir(v);
         subidos++;
+      } on StateError {
+        // Este no se puede subir (por ejemplo, ya no está su archivo): se sigue con los demás.
+      } on ErrorServidor catch (e) {
+        // Con la clave equivocada fallarían todos.
+        if (e.codigo == 401) break;
       } catch (_) {
-        // Sin señal o error: se reintenta en la próxima pasada.
+        // Sin señal: los demás también fallarían (y cada uno esperaría su
+        // tiempo límite). Se reintenta en la próxima pasada.
+        break;
       }
     }
     return subidos;

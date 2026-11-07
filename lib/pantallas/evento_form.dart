@@ -23,13 +23,17 @@ class PantallaEventoForm extends StatefulWidget {
 class _PantallaEventoFormState extends State<PantallaEventoForm> {
   final a = Almacen.instancia;
   late final Evento e = widget.evento == null
-      ? Evento(id: nuevoId(6), nombre: '', fecha: DateTime.now())
+      // 10 letras: la dirección de la galería no se puede adivinar probando.
+      ? Evento(id: nuevoId(10), nombre: '', fecha: DateTime.now())
       : Evento.fromJson(widget.evento!.toJson());
   late final _nombre = TextEditingController(text: e.nombre);
   late final _inicio = TextEditingController(text: '${e.cancionInicio}');
 
   /// Cómo estaba el formulario al abrirlo, para avisar si se sale sin guardar.
   late final String _inicial;
+
+  /// true desde que se toca Guardar: un segundo toque no lo agrega dos veces.
+  bool _guardando = false;
 
   @override
   void initState() {
@@ -334,6 +338,8 @@ class _PantallaEventoFormState extends State<PantallaEventoForm> {
   }
 
   Future<void> _guardar() async {
+    if (_guardando) return;
+    _guardando = true;
     e.nombre = _nombre.text.trim().isEmpty ? 'Evento ${fechaCorta(e.fecha)}' : _nombre.text.trim();
     e.cancionInicio = int.tryParse(_inicio.text) ?? 0;
     final original = widget.evento;
