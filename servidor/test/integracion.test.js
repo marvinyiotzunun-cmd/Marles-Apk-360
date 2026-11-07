@@ -3,28 +3,14 @@
 // la descarga por partes y los intentos de abuso.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { fileURLToPath } from 'node:url';
-import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
+import { Miniflare } from 'miniflare';
+import { opcionesServidor } from '../herramientas/opciones.mjs';
 
 const CLAVE = 'una-clave-larga-de-prueba';
-const ruta = (r) => fileURLToPath(new URL(r, import.meta.url));
 let mf;
 
 before(async () => {
-  // Miniflare 5 trae otro formato de opciones; este convierte el clásico.
-  mf = new Miniflare(
-    convertV4MiniflareOptions({
-      name: 'marles360',
-      modulesRoot: ruta('..'),
-      modules: [
-        { type: 'ESModule', path: ruta('../src/index.js') },
-        { type: 'ESModule', path: ruta('../src/paginas.js') },
-      ],
-      compatibilityDate: '2026-09-01',
-      r2Buckets: ['VIDEOS'],
-      bindings: { CLAVE },
-    }),
-  );
+  mf = new Miniflare(opcionesServidor({ clave: CLAVE }));
   await mf.ready;
 });
 

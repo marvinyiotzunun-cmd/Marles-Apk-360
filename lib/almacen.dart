@@ -71,7 +71,7 @@ class Almacen extends ChangeNotifier {
 
   /// Los videos ya subidos se borran del celular a los 30 días, igual que en
   /// la nube, para no llenar la memoria. Los pendientes nunca se borran.
-  /// También se borran las grabaciones sin procesar que quedaron sueltas.
+  /// También se borran los archivos sueltos (que no están en la lista).
   Future<void> _limpiarViejos() async {
     final ahora = DateTime.now();
     final limite = ahora.subtract(const Duration(days: diasGuardado));
@@ -83,7 +83,12 @@ class Almacen extends ChangeNotifier {
     final enUso = {for (final v in videos) v.archivo};
     final ayer = ahora.subtract(const Duration(days: 1));
     for (final f in dirVideos.listSync().whereType<File>()) {
-      if (!enUso.contains(f.path) && f.statSync().modified.isBefore(ayer)) await f.delete();
+      if (enUso.contains(f.path)) continue;
+      // Una grabación sin procesar se borra al día. Un video ya terminado que
+      // no está en la lista (por ejemplo si datos.json se dañó) puede ser el
+      // de un invitado sin subir: se guarda los mismos 30 días que los demás.
+      final crudo = nombreDe(f.path).startsWith('crudo_');
+      if (f.statSync().modified.isBefore(crudo ? ayer : limite)) await f.delete();
     }
     if (viejos.isNotEmpty) await guardar();
   }

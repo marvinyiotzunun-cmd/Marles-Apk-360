@@ -39,7 +39,32 @@ jobs:
           fi
       - run: flutter pub get
       - run: flutter analyze
+      # Pruebas de punta a punta: ffmpeg arma el video final igual que en el
+      # celular, y la app sube de verdad al servidor (el mismo código que corre
+      # en Cloudflare, levantado aquí con un almacenamiento de prueba).
+      - name: Instalar ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: servidor/package-lock.json
+      - name: Levantar el servidor de prueba
+        working-directory: servidor
+        run: |
+          npm ci
+          nohup node herramientas/servir.mjs > servidor.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -sf -H 'Authorization: Bearer clave-de-prueba-local' http://127.0.0.1:8787/api/ping > /dev/null && exit 0
+            sleep 1
+          done
+          echo "::error::El servidor de prueba no arrancó"
+          cat servidor.log
+          exit 1
       - run: flutter test
+        env:
+          MARLES_E2E_URL: http://127.0.0.1:8787
+          MARLES_E2E_CLAVE: clave-de-prueba-local
       - name: Compilar APK
         env:
           MARLES_FIRMA: ${{ secrets.MARLES_FIRMA }}

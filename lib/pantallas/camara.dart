@@ -83,7 +83,10 @@ class _PantallaCamaraState extends State<PantallaCamara> with WidgetsBindingObse
     if (cam == null) return;
     _reloj?.cancel();
     _cam = null;
-    unawaited(cam.dispose());
+    // Se cierra apenas termine lo que está corriendo: aquí se puede llegar desde
+    // un aviso de la misma cámara (_revisarCamara), y cerrarla mientras avisa
+    // es un error.
+    scheduleMicrotask(() => unawaited(cam.dispose()));
     if (mounted) setState(() => _fase = _Fase.preparando);
   }
 
